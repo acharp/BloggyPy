@@ -1,21 +1,17 @@
 # -*- coding: utf-8 -*-
 
-# Première version sans hash, on va faire avec le pwd en clair pour le moment
-#from werkzeug.security import check_password_hash 
+from werkzeug.security import check_password_hash 
+
 
 class User():
-
-   #str userid 
-
-   #str server
-   #avatar =
-   #email =
-   #list tweets
-   #dict follow
 
     def __init__(self, username, password):
         self.username = username
         self.password = password
+        self.tweets = []
+        self.follow = {}
+        #self.email =
+        #self.avatar =
 
     @property
     def is_authenticated(self):
@@ -34,6 +30,12 @@ class User():
 
     @staticmethod
     def validate_login(bdd_pwd, given_pwd):
-        if bdd_pwd == given_pwd:
-            return True
-        return False
+        return check_password_hash(bdd_pwd, given_pwd)
+
+
+class Tweet():
+
+    def __init__(self, content):
+        self.content = content
+        #self.date =
+        #self.location =

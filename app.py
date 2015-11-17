@@ -5,8 +5,7 @@ from bson import ObjectId
 import json
 from flask.ext.login import LoginManager, login_user, logout_user, login_required, current_user
 from models import User
-# Pour le moment on ne hash pas le password, on fera ça dans une seconde version
-#from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash
 
 
 app = Flask(__name__)
@@ -36,59 +35,65 @@ def hello_world():
     return "Hello World!"
 
 
+# User registration 
 @app.route('/users', methods=['POST'])
 def create_user():
-# Récupération des paramètres depuis un query string
-#    user={}
-#    user['name'] = request.args.get('name')
-#    user['age'] = request.args.get('age')
 
-# Récupération des paramètres depuis un json
+    # Retrieve json parameters
     if not request.json :
-        abort(400)
+        abort(400, "JSON expected in the request body.")
     user = request.get_json() # Renvoie un dict
    
-    # Quand on voudra implémenter le hash du password
-   #password = user['password']
-   #pass_hash = generate_password_hash(password, method='pbkdf2:sha256') 
+    # Hashing user's password
+    user['password'] = generate_password_hash(user['password'], method='pbkdf2:sha256', salt_length=6)
 
-    # VERIF QUE L'USER N'EXISTE PAS DEJA (test sur le username)
-    user_id = users.insert_one(user).inserted_id # Renvoit l'id de l'user inséré, on peut aussi faire un insert sans récupérer l'id
-    print("User " + user + "successfully created !\n")
+    # Checking user unicity before storing in databse
+    if (users.find_one({'username' : user['username']}) == None):
+        users.insert_one(user) 
+        return "User " + str(user) + " successfully created !\n"
+    else :
+        abort(400, "This user already exists in the database.")
 
-    return str(user_id);
 
-
+# Retrieving list of all users registered
 @app.route('/users')
 def return_users():
-    #one_user = db.users.find_one({"name":"Miguel"}) # Renvoie un user
+
     list_users=[]
     for user in db.users.find():
-        list_users.append(user)
-    print(list_users)
+        list_users.append(user['username'])
+
     dict_users = { 'users' : list_users}
-    return JSONEncoder().encode(dict_users);
-    #return jsonify(dict_users) # Fonctionne si on définit nos propres id et qu'on a pas à décoder ObjectId
+    #return JSONEncoder().encode(dict_users);
+    return jsonify(dict_users) # Fonctionne si on définit nos propres id et qu'on a pas à décoder ObjectId OU si on ne renvoie pas les id dans ce json
 
 
+# User authentication/login
 @app.route('/sessions', methods=['POST'])
 def login():
     
+    # Retrieve json parameters
     if not request.json:
-        abort(400)
+        abort(400, "JSON expected in the request body.")
     user_to_login = request.get_json()
 
+    # Check user registration
     user_db = users.find_one({'username': user_to_login['username']})
-    if user_db and User.validate_login(user_db['password'], user_to_login['password']):
-        user_obj = User(user_db['username'], user_db['password'])
-        login_user(user_obj)
-        print("User : " + user_db['username'] + " logged in successfully !\n")
-        #flash("User : " + user_db['username'] + " logged in successfully !", category='success')
-        return "OK le login c'est cool" # A remplacer par un redirect dans une version future 
-    print("Wrong username or password ! \n") #flash("Wrong username or password !", category='error')
-    return "NON le login c'est pas cool"
+    if user_db:
+
+        # Check password validation
+        if User.validate_login(user_db['password'], user_to_login['password']):
+            user_obj = User(user_db['username'], user_db['password'])
+            login_user(user_obj)
+            return "User : " + user_db['username'] + " logged in successfully !\n"
+        else:
+            abort(401, "Wrong password !")
+
+    else:
+        abort(401, "Wrong username !")
 
 
+# User logout
 @app.route('/logout')
 def logout():
     logout_user()
@@ -96,6 +101,7 @@ def logout():
     return "Logout OK !"
 
 
+# Test authentication
 @app.route('/protected')
 @login_required
 def protected():
@@ -104,6 +110,12 @@ def protected():
     return "Accés avec login OK !"
 
 
+# Add a tweet, by the logined user.
+@app.route('/:handle/tweets', methods=['POST'])
+@login_required
+
+
+# Method to instanciate an user from database. Used in login().
 @lm.user_loader
 def load_user(username):
     u = users.find_one({'username': username})
@@ -113,9 +125,9 @@ def load_user(username):
 
 
 # Next steps :
-# Voir pour l'authentification https://flask-login.readthedocs.org/en/latest/
 # Ajouter le champ follow aux users qui contiendra un dict id users followés : date de following 
 # Récupérer les followers et les followings, c'est surtout l'aspect requête à la base qui est à réfléchir ici
+# Refactorer(créer fichier de config, et répartir méthodes dans d'autres classes : créer un views.py)  (et cleaner) code.
 
 if __name__ == '__main__':
     app.run()
