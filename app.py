@@ -18,6 +18,7 @@ app.config['SECRET_KEY'] = 'itsasecret'
 client = MongoClient('localhost', 27017)
 db = client.blogdb
 users = db.users
+tweets = db.tweets
 
 
 # Pour décoder le champ ObjectId. Sinon définir nous même les _id et ne pas utiliser cette classe.
@@ -106,13 +107,117 @@ def logout():
 @login_required
 def protected():
     user_logged = current_user.get_id()
-    print(user_logged + " is logged in \n")
-    return "Accés avec login OK !"
+    return user_logged + " is logged in \n" 
 
 
 # Add a tweet, by the logined user.
-@app.route('/:handle/tweets', methods=['POST'])
+@app.route('/<username>/tweets', methods=['POST'])
 @login_required
+def add_tweet(username):
+
+    if username != current_user.get_id():
+        return "Actual authenticated user doesn't match with " + username 
+
+    if not request.json :
+        abort(400, "JSON expected in the request body.")
+    tweet = request.get_json()  
+
+    tweet_id = tweets.insert_one(tweet).inserted_id
+    
+    try:
+        user_tweets = users.find_one({'username': username})['tweets']
+    # Handle the case when it's the first tweet of the user
+    except KeyError:
+        user_tweets=[]
+
+    user_tweets.append(tweet_id)
+    res = users.update_one({'username': username}, {'$set': {'tweets': user_tweets}})
+    if res:
+        return username + " tweeted " + tweet['content']
+    else:
+        return "error occured while tweeting"
+
+
+# Retrive all the tweets of the user <username>
+@app.route('/<username>/tweets')
+def return_user_tweets(username):
+
+    #TESTER SI l'USERNAME EXISTE EN BASE
+
+    try:
+        user_tweets_id = users.find_one({'username': username})['tweets']
+    except KeyError:
+        return "This user doesn't have any tweet"
+    user_tweets_content = []
+    for tweetid in user_tweets_id:
+        user_tweets_content.append(tweets.find_one({'_id': tweetid})['content'])
+    res = {'username': username, 'tweets': user_tweets_content}
+    return jsonify(res)
+
+
+# Retrive all the tweets in the database
+@app.route('/tweets')
+def return_tweets():
+    list_tweets=[]
+    for tweet in db.tweets.find():
+        list_tweets.append(tweet['content'])
+    dict_tweets = {'tweets' : list_tweets}
+    return jsonify(dict_tweets)
+
+
+# Follow someone
+@app.route('/<username>/followings', methods=['POST'])
+@login_required
+def follow_user(username):
+    if username != current_user.get_id():
+        return "Actual authenticated user doesn't match with " + username
+
+    # EMPECHER DE POUVOIR SE SUIVRE SOIT-MEME et EMPECHER DE POUVOIR SUIVRE PLUSIEURS FOIS LE MEME USER
+
+    if not request.json :
+        abort(400, "JSON expected in the request body.")
+    user_to_follow = request.get_json()
+
+    try:
+        user_follows = users.find_one({'username': current_user.get_id()})['follow']
+    except KeyError:
+        user_follows = []
+
+    user_follows.append(user_to_follow['username'])
+    res = users.update_one({'username': username}, {'$set': {'follow': user_follows}})
+    if res:
+        return username + " is now following " + user_to_follow['username']
+    else:
+        return "error occured while trying to follow " + user_to_follow('username') 
+
+
+# Unfollow someone
+@app.route('/<username>/followings', methods=['DELETE'])
+@login_required
+def unfollow_user(username):
+    if username != current_user.get_id():
+        return "Actual authenticated user doesn't match with " + username
+
+    if not request.json :
+        abort(400, "JSON expected in the request body.")
+    user_to_unfollow = request.get_json()
+
+    try:
+        user_follows = users.find_one({'username': current_user.get_id()})['follow']
+    except KeyError:
+        return "User " + username + " doesn't follow anybody"
+
+    # A CONTINUER
+
+
+
+
+# Retrieve followers of the user <username>
+#@app.route('/<username>/followers')
+
+
+# Retrieve followings of the user <username>
+#@app.route('/<username>/followings')
 
 
 # Method to instanciate an user from database. Used in login().
