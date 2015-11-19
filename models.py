@@ -9,7 +9,8 @@ class User():
         self.username = username
         self.password = password
         self.tweets = []
-        self.follow = []
+        self.followings = []
+        self.followers = []
         #self.email =
         #self.avatar =
 
