@@ -113,10 +113,6 @@ class DataStore:
             return True
         else:
             return False
-
-
-    #def _timestamp(self, dt):
-    #    return int((dt - datetime.datetime(1970, 1, 1)) / datetime.timedelta(seconds=1))
     
     def _paginate(self, page):
         if page < 1:
